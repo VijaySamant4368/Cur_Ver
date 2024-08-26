@@ -3,10 +3,14 @@ import matplotlib.pyplot as plt
 import random
 
 def main():
-    degree = 20     #The degree of the curve. The highest '?' in (c1*x^?+...+cn*x^?) where c is some constant
-    X, Y = collectData(observations = 10, degree= 2, randomness=1 )
+    degree = 10     #The degree of the curve. The highest '?' in (c1*x^?+...+cn*x^?) where c is some constant
+    data_degree = 2
+    slope = np.ones(data_degree + 1)
+    for s in range(data_degree +1):
+        slope[s] = random.randint(-10, 10)
+    X, Y = collectData(observations = 10, degree = data_degree, randomness=1, slope=slope )
     X_scaled, max, min= scaleDown(X)
-    W_ = gradientDescent(X_scaled, Y, degree, alpha= 1, var_grad=True)
+    W_ = gradientDescent(X_scaled, Y, degree, alpha= 10, epsilon=0.000001, var_grad=False)
     Y_Hat = f(W_, X_scaled, degree=degree)
     
     printData(X_scaled, Y, Y_Hat)
@@ -19,18 +23,20 @@ def main():
     plt.show()
     
     
-def collectData(observations:int = 20, randomness:float = 0.1, degree:int = 1, slope:float = 1) -> tuple[np.ndarray, np.ndarray]:
+def collectData(observations:int = 20, randomness:float = 0.1, degree:int = 1, slope:np.ndarray = None) -> tuple[np.ndarray, np.ndarray]:
     """Returns two numpy arrays, the input and output.
 
     Args:
         observations (int, optional): Total number of input-output pairs. Defaults to 20.
         randomness (float, optional): The amount of randomness in the dataset. Defaults to 0.1.
         degree (int, optional): The degree of the curve, skeleton of the datapoints. Defaults to 1.
-        slope (float, optional): The slope of each power of x. Defaults to 1.
+        slope (np.ndarray, optional): Array slope of each power of x. Defaults to None.
 
     Returns:
         tuple[np.ndarray, np.ndarray]: Input array and corresponding output array
     """
+    if type(slope) == 'NoneType':
+        slope = np.ones(degree + 1)
     X = np.arange(observations)
     Y = curve(X, degree, slope)
     Y = randomize(Y, randomness)
@@ -54,13 +60,13 @@ def scaleDown(arr: np.ndarray)  -> tuple[np.ndarray, float, float]:
     max = arr.max()
     return (arr-min)/(max-min), max, min
     
-def curve(X: np.ndarray, degree:int, slope:float)  -> np.ndarray:
+def curve(X: np.ndarray, degree:int, slope:np.ndarray)  -> np.ndarray:
     """Returns numpy array of output points
 
     Args:
         X (np.ndarray): The input array
         degree (int): The degree of function
-        slope (float): The slope of variables
+        slope (np.ndarray): The slope of variables
 
     Returns:
         np.ndarray: The output array
@@ -71,7 +77,8 @@ def curve(X: np.ndarray, degree:int, slope:float)  -> np.ndarray:
         x = X[i]
         y = 0
         for j in range(degree + 1):
-            y += slope * (x**j)
+            y += slope[j] * (x**j)
+            
         Y[i] = y
     return Y
 
@@ -108,6 +115,7 @@ def gradientDescent(X_: np.ndarray, Y_: np.ndarray, degree: int = 1, alpha:float
     Returns:
         np.ndarray: Numpy array of weights
     """
+    folder = "var_grad"
     N = degree +1
     M = X_.size
     W_ = np.ones(N)
@@ -119,16 +127,19 @@ def gradientDescent(X_: np.ndarray, Y_: np.ndarray, degree: int = 1, alpha:float
     
     while True:
         cost = (sqErrorCost(W_, X_, Y_, degree))
-        if iterations%save_gap == 0:
-            plotGraph(X_, W_, Y_, degree, filename=f"var_grad/iteration {iterations}.png", caption = f"iteration {iterations}; Cost {round(cost, 3)}", display=False)
+        if iterations%save_gap == 0 and lastCost >= cost:
+            plotGraph(X_, W_, Y_, degree, filename=f"{folder}/iteration {iterations}.png", caption = f"iteration {iterations}; Cost {round(cost, 3)}", display=False)
             save_counts += 1
             if save_counts % 5 == 0:
                 save_gap *=10
-        if (iterations > 5):
+        if (iterations > 0):
             if (lastCost < cost):
                 print(f"Cost exceeded from {lastCost} to {cost}")
-                break
-            if (lastCost - cost <= epsilon):
+                alpha /= 10
+                plotGraph(X_, W_, Y_, degree, 
+                          filename=f"{folder}/Iteration {iterations} Cost increased.png", 
+                          caption=f"Cost exceeded, alpha was {alpha}\n Cost {round(cost, 3)}; Last {round(lastCost, 3)}") 
+            if (0< lastCost - cost <= epsilon):
                 print(f"Probably reached minima, cost decreased by only {lastCost - cost}")
                 break
             if var_grad:
@@ -146,7 +157,7 @@ def gradientDescent(X_: np.ndarray, Y_: np.ndarray, degree: int = 1, alpha:float
         lastCost = cost
         iterations += 1
     
-    plotGraph(X_, W_, Y_, degree, filename=f"var_grad/Last Iteration {iterations}.png", caption = f"Last Iteration {iterations}; Cost {round(cost, 3)}", display=False)
+    plotGraph(X_, W_, Y_, degree, filename=f"{folder}/Last Iteration {iterations}.png", caption = f"Last Iteration {iterations}; Cost {round(cost, 3)}", display=False)
     return W_
     
 def sqErrorCost(W_:np.ndarray, X_:np.ndarray, Y_:np.ndarray, degree:int)    -> float:
